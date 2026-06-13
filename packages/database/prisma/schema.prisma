@@ -1,0 +1,248 @@
+// Omniblitz — Multi-tenant Facebook Messenger SaaS
+// PostgreSQL schema via Prisma ORM (Strictly Optimized for Prisma 7)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANCY & AUTH
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A SaaS customer organization. All data is scoped to a tenant.
+model Tenant {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  plan      TenantPlan @default(FREE)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  users         User[]
+  facebookPages FacebookPage[]
+  conversations Conversation[]
+
+  @@map("tenants")
+}
+
+enum TenantPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+/// Dashboard user belonging to exactly one tenant.
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  email        String
+  name         String?
+  passwordHash String?
+  role         UserRole @default(AGENT)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sentMessages     Message[]         @relation("SentByUser")
+  facebookAccounts FacebookAccount[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  AGENT
+}
+
+/// OAuth identity linking a dashboard user to their Facebook account.
+model FacebookAccount {
+  id             String    @id @default(cuid())
+  userId         String
+  facebookUserId String    @unique
+  accessToken    String    @db.Text
+  tokenExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("facebook_accounts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FACEBOOK PAGE CONNECTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A Facebook Page connected to a tenant. Webhook routing key = pageId.
+model FacebookPage {
+  id                String         @id @default(cuid())
+  tenantId          String
+  pageId            String         @unique // Facebook Page ID — used for webhook routing
+  pageName          String
+  pageAccessToken   String         @db.Text
+  category          String?
+  pictureUrl        String?
+  isActive          Boolean        @default(true)
+  webhookSubscribed Boolean        @default(false)
+  connectedAt       DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  webhookEvents WebhookEvent[]
+
+  @@index([tenantId])
+  @@map("facebook_pages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MESSENGER CONVERSATIONS & MESSAGES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// End-user on Facebook Messenger (PSID = Page-Scoped ID).
+model MessengerUser {
+  id             String   @id @default(cuid())
+  psid           String   // Page-Scoped ID from Facebook
+  facebookPageId String   // Internal FK to FacebookPage.id
+  firstName      String?
+  lastName       String?
+  profilePicUrl  String?
+  locale         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversations Conversation[]
+
+  @@unique([psid, facebookPageId])
+  @@index([facebookPageId])
+  @@map("messenger_users")
+}
+
+/// A thread between a Messenger user and a connected Page.
+model Conversation {
+  id              String             @id @default(cuid())
+  tenantId        String
+  facebookPageId  String
+  messengerUserId String
+  status          ConversationStatus @default(OPEN)
+  lastMessageAt   DateTime?
+  unreadCount     Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  facebookPage  FacebookPage  @relation(fields: [facebookPageId], references: [id], onDelete: Cascade)
+  messengerUser MessengerUser @relation(fields: [messengerUserId], references: [id], onDelete: Cascade)
+  messages      Message[]
+
+  @@unique([facebookPageId, messengerUserId])
+  @@index([tenantId, lastMessageAt])
+  @@index([tenantId, status])
+  @@map("conversations")
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  ARCHIVED
+}
+
+/// Individual message in a conversation (inbound or outbound).
+model Message {
+  id             String             @id @default(cuid())
+  conversationId String
+  facebookMid    String?            @unique // Facebook message ID (mid)
+  direction      MessageDirection
+  contentType    MessageContentType @default(TEXT)
+  text           String?            @db.Text
+  sentByUserId   String?            // Dashboard user who sent (outbound only)
+  isRead         Boolean            @default(false)
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  rawPayload     Json?              // Original webhook payload for debugging
+  createdAt      DateTime           @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sentByUser   User?        @relation("SentByUser", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  attachments  Attachment[]
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageContentType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
+  STICKER
+  LOCATION
+  FALLBACK
+}
+
+/// Media attachment linked to a message (images, audio, files).
+model Attachment {
+  id           String         @id @default(cuid())
+  messageId    String
+  type         AttachmentType
+  url          String         @db.Text // Facebook CDN URL or stored URL
+  mimeType     String?
+  fileName     String?
+  fileSize     Int?
+  durationMs   Int?           // For audio/video
+  width        Int?           // For images/video
+  height       Int?
+  facebookAid  String?        // Facebook attachment ID
+  createdAt    DateTime       @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("attachments")
+}
+
+enum AttachmentType {
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
+  STICKER
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEBHOOK AUDIT LOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Raw webhook event log for debugging and replay.
+model WebhookEvent {
+  id             String        @id @default(cuid())
+  facebookPageId String?
+  eventType      String
+  payload        Json
+  processed      Boolean       @default(false)
+  error          String?       @db.Text
+  createdAt      DateTime      @default(now())
+  facebookPage   FacebookPage? @relation(fields: [facebookPageId], references: [id], onDelete: SetNull)
+
+  @@index([facebookPageId, createdAt])
+  @@index([processed, createdAt])
+  @@map("webhook_events")
+}

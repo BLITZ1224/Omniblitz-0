@@ -1,0 +1,22 @@
+{
+  "name": "omniblitz",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @omniblitz/api\" \"npm run dev -w @omniblitz/web\"",
+    "dev:api": "npm run dev -w @omniblitz/api",
+    "dev:web": "npm run dev -w @omniblitz/web",
+    "db:generate": "npm run generate -w @omniblitz/database",
+    "db:push": "npm run push -w @omniblitz/database",
+    "db:migrate": "npm run migrate -w @omniblitz/database",
+    "db:studio": "npm run studio -w @omniblitz/database"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
