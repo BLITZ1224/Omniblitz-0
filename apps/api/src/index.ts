@@ -10,7 +10,16 @@ const app = express();
 const PORT = Number(process.env.API_PORT) || 4000;
 
 app.use(helmet());
-app.use(cors({ origin: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000" }));
+
+// CORS Error ကင်းဝေးစေရန် Localhost ကော၊ Vercel Domain အားလုံးကိုပါ Array ဖြင့် စနစ်တကျ ခွင့်ပြုပေးလိုက်ပါသည်
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://omniblitz-0-web.vercel.app",
+    /\.vercel\.app$/ // Vercel ရဲ့ preview link တွေပါ အလုပ်လုပ်စေရန်
+  ],
+  credentials: true
+}));
 
 // JSON body parser for all routes EXCEPT webhooks (webhooks need raw body)
 app.use((req, res, next) => {
