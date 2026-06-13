@@ -2,7 +2,8 @@ import { config } from "dotenv";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/prisma/client.js";
+// Local လမ်းကြောင်းအဟောင်းအစား Standard လမ်းကြောင်း `@prisma/client` သို့ ပြောင်းလဲထားပါသည်
+import { PrismaClient } from "@prisma/client";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 config({ path: resolve(packageRoot, "../../../.env") });
@@ -15,6 +16,7 @@ function createPrismaClient(): PrismaClient {
     throw new Error("DATABASE_URL is not set");
   }
 
+  // Render က PostgreSQL အတွက် Neon DB Driver ချိတ်ဆက်မှု အပိုင်း
   const adapter = new PrismaPg({ connectionString });
   return new PrismaClient({
     adapter,
@@ -31,4 +33,5 @@ if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
-export * from "../generated/prisma/client.js";
+// Type များ အပြင်သို့ ပြန်ထုတ်ပေးရန် လမ်းကြောင်းကိုလည်း ပြောင်းလဲထားပါသည်
+export * from "@prisma/client";
