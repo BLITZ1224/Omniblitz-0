@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+// Fallback URL ကို ဒုက္ခပေးနေတဲ့ localhost အစား Render Live URL သို့ ကွက်တိ ပြောင်းလဲထားပါသည်
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://omniblitz-api.onrender.com";
 
 // TODO: Replace with real auth context
 const DEMO_TENANT_ID = "tenant_demo";
