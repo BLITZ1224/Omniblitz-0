@@ -6,15 +6,17 @@ const router = Router();
 // 1. Get all conversations
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const tenantId = req.query.tenantId as string;
+    const rawTenantId = req.query.tenantId;
     const { facebookPageId, status } = req.query;
 
+    // Tenant ID ကို string သေချာပေါက်ဖြစ်အောင် စစ်ထုတ်ခြင်း (Error Line 51 ကို ဖြေရှင်းချက်)
+    const tenantId = typeof rawTenantId === "string" ? rawTenantId : undefined;
+
     if (!tenantId) {
-      res.status(400).json({ error: "tenantId is required" });
+      res.status(400).json({ error: "tenantId is required and must be a string" });
       return;
     }
 
-    // TypeScript Array Type Error မတက်အောင် သေချာ String စစ်ထုတ်ခြင်း
     const targetPageId = typeof facebookPageId === "string" ? facebookPageId : undefined;
     const targetStatus = typeof status === "string" ? (status as any) : undefined;
 
@@ -24,7 +26,6 @@ router.get("/", async (req: Request, res: Response) => {
         facebookPageId: targetPageId,
         status: targetStatus,
       },
-      // Relation တွေဖြစ်တဲ့ messengerUser နဲ့ facebookPage ကို ပါအောင် include လုပ်ပေးခြင်း
       include: {
         messengerUser: true,
         facebookPage: true,
@@ -47,8 +48,11 @@ router.get("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    // ID က string သေချာပေါက်ဖြစ်စေရန် စစ်ထုတ်ခြင်း
+    const targetId = typeof id === "string" ? id : undefined;
+
     const conversation = await prisma.conversation.findUnique({
-      where: { id },
+      where: { id: targetId },
       include: {
         messengerUser: true,
         facebookPage: true,
@@ -72,10 +76,12 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
+    // ID နှင့် Status ကို string သေချာပေါက် ဖြစ်စေရန် စစ်ထုတ်ခြင်း (Error Line 78 ကို ဖြေရှင်းချက်)
+    const targetId = typeof id === "string" ? id : undefined;
     const targetStatus = typeof status === "string" ? status : undefined;
 
     const updated = await prisma.conversation.update({
-      where: { id },
+      where: { id: targetId },
       data: { status: targetStatus as any },
     });
 
